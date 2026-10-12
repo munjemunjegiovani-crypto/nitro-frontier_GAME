@@ -1,6 +1,8 @@
 import { AudioManager } from '../audio/AudioManager';
 import { CameraController } from '../rendering/CameraController';
 import { Renderer } from '../rendering/Renderer';
+import { ReflectionProbe } from '../rendering/ReflectionProbe';
+import * as THREE from 'three';
 import { SaveManager, type Settings } from '../storage/SaveManager';
 import { TRACKS, getTrack } from '../tracks/TrackRegistry';
 import { HUD } from '../ui/HUD';
@@ -39,6 +41,8 @@ export class Game {
   private laps: number = RACE.defaultLaps;
   private settingsReturn: GameStateName = 'mainMenu';
   private playerInput: DriveInput = { ...NO_INPUT };
+  private probe: ReflectionProbe;
+  private probePos = new THREE.Vector3();
 
   // UI
   private hud = new HUD();
@@ -55,6 +59,7 @@ export class Game {
     this.renderer = new Renderer(canvas);
     this.cameraCtl = new CameraController(this.renderer.camera);
     this.showroom = new Showroom(this.renderer.scene);
+    this.probe = new ReflectionProbe(this.renderer.renderer, 128);
     this.vehicleId = this.save.data.lastVehicle;
     this.trackId = getTrack(this.save.data.lastTrack).id;
 
@@ -77,7 +82,7 @@ export class Game {
       back: () => this.go('modeSelect'),
     });
     this.trackSelect = new TrackSelect(sounds, {
-      change: (id) => { this.trackId = id; this.showroom.setTrack(id, this.renderer.qualityLevel); this.renderer.setEnvironment(getTrack(id).theme); },
+      change: (id) => { this.trackId = id; this.showroom.setTrack(id, this.renderer.qualityLevel); this.renderer.setEnvironment(getTrack(id).theme); this.probe.reset(); },
       start: (id, laps) => { this.trackId = id; this.laps = laps; this.startRace(); },
       back: () => this.go('vehicleSelect'),
     });
@@ -116,6 +121,7 @@ export class Game {
   /** Builds the first scene and enters the main menu. */
   start(): void {
     this.renderer.setEnvironment(getTrack(this.trackId).theme);
+    this.renderer.setGradeTint(getTrack(this.trackId).theme.night);
     this.showroom.setTrack(this.trackId, this.renderer.qualityLevel);
     this.showroom.setVehicle(this.vehicleId);
     this.showroom.attach();
@@ -225,6 +231,8 @@ export class Game {
     this.showroom.unload();
     const setup = this.buildSetup();
     this.renderer.setEnvironment(getTrack(setup.trackId).theme);
+    this.renderer.setGradeTint(getTrack(setup.trackId).theme.night);
+    this.probe.reset();
     this.race = new RaceManager(setup, this.renderer.scene, this.renderer.qualityLevel, {
       notify: (text, color, big) => (big ? this.hud.bigBanner(text, color) : this.hud.notify(text, color)),
       sound: (name, intensity) => this.audio.play(name, intensity),
@@ -313,6 +321,7 @@ export class Game {
 
   private reloadShowroom(): void {
     this.renderer.setEnvironment(getTrack(this.trackId).theme);
+    this.probe.reset();
     this.showroom.setTrack(this.trackId, this.renderer.qualityLevel);
     this.showroom.setVehicle(this.vehicleId);
     this.showroom.attach();
@@ -336,6 +345,24 @@ export class Game {
         ? [['MAIN MENU', () => this.quitToMenu(), true]]
         : [['QUIT', () => this.quitToMenu()], [`NEXT: ${getTrack(champ.currentTrackId).name}`, () => { this.trackId = champ.currentTrackId; this.startRace(); }, true]],
     });
+  }
+
+  /** Keeps the reflection probe near the player (or the showroom car). */
+  private updateReflections(race: RaceManager | null): void {
+    const q = this.renderer.qualityLevel;
+    if (race) {
+      const p = race.player.physics;
+      this.probePos.set(p.x, p.y + 1.6, p.z);
+      const interval = q === 'high' ? 10 : q === 'medium' ? 40 : 0;
+      this.probe.tick(this.renderer.scene, this.probePos, interval, [race.player.model.root, race.effects.group]);
+      const P = race.player;
+      const sp = Math.max(0, p.speed / P.config.maxSpeed - 0.8) * 2 + (p.boosting || P.nitroSurgeTime > 0 ? 0.6 : 0);
+      this.renderer.setSpeedFx(this.save.data.settings.speedEffects ? Math.min(1.6, sp) : 0);
+    } else {
+      this.probePos.copy(this.showroom.focus).add(new THREE.Vector3(0, 1.4, 0));
+      this.probe.tick(this.renderer.scene, this.probePos, 0, [this.showroom.carObject]);
+      this.renderer.setSpeedFx(0);
+    }
   }
 
   /* --------------------------- Input --------------------------- */
@@ -393,6 +420,7 @@ export class Game {
       // Settings opened from pause, or standings over the last race scene: keep scene static.
     }
     if (race) race.effects.setViewportHeight(this.renderer.viewportHeight);
+    this.updateReflections(race);
     this.renderer.render();
     this.renderer.trackFrame(dt);
   }

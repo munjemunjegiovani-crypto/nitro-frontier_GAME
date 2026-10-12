@@ -38,8 +38,8 @@ export class CameraController {
     const fx = Math.sin(this.smoothedHeading);
     const fz = Math.cos(this.smoothedHeading);
     const speedF = Math.min(1, car.speed / 80);
-    let dist: number = CAMERA.distance + speedF * 2.2;
-    let height: number = CAMERA.height + speedF * 0.4;
+    let dist: number = CAMERA.distance + speedF * 1.6;
+    let height: number = CAMERA.height + speedF * 0.25;
     let ahead: number = CAMERA.lookAhead;
     if (this.mode === 'far') { dist *= 1.55; height *= 1.7; ahead *= 1.4; }
     if (this.mode === 'hood') { dist = -0.6; height = 1.25; ahead = 20; }
@@ -48,7 +48,7 @@ export class CameraController {
     const turn = car.yawRate * 3.5;
     outLook.set(
       car.x + Math.sin(car.heading + turn * 0.2) * ahead,
-      car.y + (this.mode === 'hood' ? 1.1 : 1.3),
+      car.y + (this.mode === 'hood' ? 1.1 : 1.05),
       car.z + Math.cos(car.heading + turn * 0.2) * ahead,
     );
   }

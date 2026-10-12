@@ -480,7 +480,7 @@ export class RaceManager {
     }
     if (p.boosting || v.nitroSurgeTime > 0) {
       const col = v.nitroSurgeTime > 0 ? 0xffd23f : 0x54e8ff;
-      this.effects.trail(bx, p.y + 0.6, bz, col, 1, 0.3);
+      if (Math.random() < 0.5) this.effects.trail(bx, p.y + 0.45, bz, col, 0.45, 0.22);
     }
     if (scenery === 'canyon' && p.grounded && p.speed > 30 && Math.abs(p.lateral) > this.track.sample(p.trackIndex).halfWidth - 3) {
       this.effects.smokePuff(bx, p.y + 0.3, bz, 0xd09a6a, 3, 2);

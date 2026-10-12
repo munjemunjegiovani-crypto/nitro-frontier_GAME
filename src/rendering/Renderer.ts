@@ -3,6 +3,38 @@ import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
+import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js';
+import { GTAOPass } from 'three/examples/jsm/postprocessing/GTAOPass.js';
+
+/**
+ * Final colour grade, applied after tone mapping: gentle S-curve contrast,
+ * saturation, a cinematic vignette and speed-driven chromatic aberration.
+ */
+const GradeShader = {
+  uniforms: {
+    tDiffuse: { value: null as THREE.Texture | null },
+    uContrast: { value: 1.08 },
+    uSaturation: { value: 1.12 },
+    uVignette: { value: 0.32 },
+    uAberration: { value: 0 },
+    uTint: { value: new THREE.Color(1, 1, 1) },
+  },
+  vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+  fragmentShader: `
+    uniform sampler2D tDiffuse; uniform float uContrast; uniform float uSaturation; uniform float uVignette; uniform float uAberration; uniform vec3 uTint;
+    varying vec2 vUv;
+    void main(){
+      vec2 d = vUv - 0.5;
+      float r2 = dot(d, d);
+      vec2 off = d * uAberration * r2 * 0.012;
+      vec3 c = vec3(texture2D(tDiffuse, vUv + off).r, texture2D(tDiffuse, vUv).g, texture2D(tDiffuse, vUv - off).b);
+      c = (c - 0.5) * uContrast + 0.5;
+      float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
+      c = mix(vec3(l), c, uSaturation) * uTint;
+      c *= 1.0 - uVignette * smoothstep(0.18, 0.75, r2 * 2.2);
+      gl_FragColor = vec4(clamp(c, 0.0, 1.0), 1.0);
+    }`,
+};
 import type { Quality } from '../tracks/TrackFactory';
 import type { TrackTheme } from '../tracks/Track';
 
@@ -22,6 +54,8 @@ export class Renderer {
   readonly camera: THREE.PerspectiveCamera;
   private composer: EffectComposer | null = null;
   private bloom: UnrealBloomPass | null = null;
+  private grade: ShaderPass | null = null;
+  private gtao: GTAOPass | null = null;
   private quality: Quality = 'high';
   /** User render scale (0.5..1). */
   renderScale = 1;
@@ -87,12 +121,25 @@ export class Renderer {
     this.composer?.dispose();
     this.composer = null;
     this.bloom = null;
+    this.grade = null;
+    this.gtao?.dispose();
+    this.gtao = null;
     if (q !== 'low') {
-      this.composer = new EffectComposer(this.renderer);
+      // Render into an MSAA target so edges stay smooth through post-processing.
+      const target = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: q === 'high' ? 4 : 2 });
+      this.composer = new EffectComposer(this.renderer, target);
       this.composer.addPass(new RenderPass(this.scene, this.camera));
-      this.bloom = new UnrealBloomPass(new THREE.Vector2(256, 256), q === 'high' ? 0.85 : 0.6, 0.55, 0.62);
+      if (q === 'high') {
+        this.gtao = new GTAOPass(this.scene, this.camera, 1, 1);
+        this.gtao.blendIntensity = 0.85;
+        this.gtao.updateGtaoMaterial({ radius: 0.6, distanceExponent: 1.4, thickness: 1.2, scale: 1 });
+        this.composer.addPass(this.gtao);
+      }
+      this.bloom = new UnrealBloomPass(new THREE.Vector2(256, 256), q === 'high' ? 0.7 : 0.55, 0.5, 0.72);
       this.composer.addPass(this.bloom);
       this.composer.addPass(new OutputPass());
+      this.grade = new ShaderPass(GradeShader);
+      this.composer.addPass(this.grade);
     }
     this.autoScale = 1;
     this.resize();
@@ -145,6 +192,17 @@ export class Renderer {
   render(): void {
     if (this.composer) this.composer.render();
     else this.renderer.render(this.scene, this.camera);
+  }
+
+  /** 0..1 speed factor for the aberration effect (0 disables). */
+  setSpeedFx(v: number): void {
+    if (this.grade) this.grade.uniforms.uAberration.value = v;
+  }
+
+  setGradeTint(night: boolean): void {
+    if (!this.grade) return;
+    this.grade.uniforms.uSaturation.value = night ? 1.18 : 1.1;
+    this.grade.uniforms.uContrast.value = night ? 1.1 : 1.06;
   }
 
   setBloomStrength(s: number): void {

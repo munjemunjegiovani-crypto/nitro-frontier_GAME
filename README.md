@@ -9,6 +9,10 @@ Six fictional cars, three hand-shaped circuits, six energy weapons, five AI riva
 |---|---|
 | ![Neon Harbor](docs/screenshots/neon-harbor.png) | ![Redline Canyon](docs/screenshots/redline-canyon.png) |
 
+| Neon Harbor tunnel | |
+|---|---|
+| ![Tunnel](docs/screenshots/neon-harbor-tunnel.png) | |
+
 | Vehicle select | Circuit select |
 |---|---|
 | ![Vehicle select](docs/screenshots/vehicle-select.png) | ![Track select](docs/screenshots/track-select.png) |
@@ -49,7 +53,7 @@ Racers further back receive more catch-up items, so combat rewards positioning r
 - **Redline Canyon** — desert badlands at dusk, with mesas, a refinery hairpin and two jumps.
 - **Skyline Circuit** — a figure-eight suspended in the sky that crosses over itself.
 
-**Presentation** — bloom, per-track reflection environments, dynamic shadows, fog, procedural skies (with stars at night), particle sparks/smoke/dust/explosions, speed lines, FOV kick, camera shake, three camera modes, a fully procedural synth soundtrack and engine/tyre/wind audio, animated menus with a 3D showroom, HUD with minimap and live leaderboard.
+**Presentation** — sculpted procedural cars with racing liveries, detailed rims and brake calipers; a live reflection probe so cars and wet asphalt mirror their real surroundings; MSAA anti-aliasing, ambient occlusion, bloom and colour grading; textured asphalt with wet patches, red/white kerbs, concrete walls, skyscrapers with real-scale windows, layered canyon rock, procedural clouds and stars, particle sparks/smoke/dust/explosions, speed lines, FOV kick, camera shake, three camera modes, a fully procedural synth soundtrack and engine/tyre/wind audio, animated menus with a 3D showroom, HUD with minimap and live leaderboard.
 
 ---
 
@@ -150,6 +154,7 @@ src/
     Lighting.ts           Sun + sky light with a following shadow frustum
     CameraController.ts   Chase / far / hood cameras, lag, look-ahead, shake, FOV
     Effects.ts            Pooled GPU particles, shock rings, speed lines
+    ReflectionProbe.ts    Live cube-map reflections of the surroundings
   vehicles/
     VehicleConfig.ts      The six cars and their stats
     VehiclePhysics.ts     Arcade physics: grip, drift, nitro, walls, airtime
@@ -162,7 +167,8 @@ src/
   tracks/
     Track.ts              Spline sampling and fast nearest-point queries
     TrackRegistry.ts      The three circuit definitions
-    TrackFactory.ts       Procedural road, barriers, tunnels, scenery
+    TrackFactory.ts       Procedural road, kerbs, barriers, tunnels, scenery
+    Materials.ts          Procedural textures: asphalt, kerbs, concrete, facades, rock, sand
     CheckpointSystem.ts   Lap/checkpoint progress and ranking
   combat/
     PowerUp.ts            Power-up definitions and the weighted roll

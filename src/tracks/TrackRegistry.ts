@@ -35,8 +35,8 @@ export const TRACKS: readonly TrackDefinition[] = [
     scenery: 'city',
     theme: {
       skyTop: 0x05060d, skyHorizon: 0x2a1450, fog: 0x120c26, fogDensity: 0.0042,
-      ground: 0x0b0d14, road: 0x1b1e26, edge: 0x20e3ff, edgeAlt: 0xff2fb4,
-      sun: 0x8fa8ff, sunIntensity: 0.9, ambient: 0x4a3a8a, ambientIntensity: 0.75, night: true,
+      ground: 0x12151e, road: 0x24283a, edge: 0x20e3ff, edgeAlt: 0xff2fb4,
+      sun: 0x9fb4ff, sunIntensity: 1.1, ambient: 0x5a4a9a, ambientIntensity: 1.0, night: true,
     },
   },
   {

@@ -73,14 +73,22 @@ export class WeaponSystem {
   }
 
   private buildPickups(): void {
-    const cubeGeo = new THREE.IcosahedronGeometry(1.1, 0);
-    const coreGeo = new THREE.OctahedronGeometry(0.55, 0);
-    const shellMat = new THREE.MeshStandardMaterial({ color: 0x14161c, emissive: 0x20e3ff, emissiveIntensity: 1.2, metalness: 0.7, roughness: 0.25, transparent: true, opacity: 0.85, wireframe: true });
-    const coreMat = new THREE.MeshBasicMaterial({ color: 0xff7a1a });
-    const baseGeo = new THREE.RingGeometry(1.3, 1.7, 24);
-    baseGeo.rotateX(-Math.PI / 2);
-    const baseMat = new THREE.MeshBasicMaterial({ color: 0x20e3ff, transparent: true, opacity: 0.6, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
-    this.disposables.push(cubeGeo, coreGeo, shellMat, coreMat, baseGeo, baseMat);
+    // Pickup: a glossy faceted crystal with a glowing core, a spinning
+    // halo and a light beam so it reads from far away.
+    const cubeGeo = new THREE.OctahedronGeometry(1.0, 0);
+    const coreGeo = new THREE.OctahedronGeometry(0.42, 0);
+    const shellMat = new THREE.MeshPhysicalMaterial({
+      color: 0x0d3b4a, emissive: 0x20e3ff, emissiveIntensity: 0.9, metalness: 0.1, roughness: 0.08,
+      clearcoat: 1, transparent: true, opacity: 0.82, flatShading: true,
+    });
+    const coreMat = new THREE.MeshBasicMaterial({ color: 0xffb070 });
+    const baseGeo = new THREE.TorusGeometry(1.45, 0.06, 6, 40);
+    baseGeo.rotateX(Math.PI / 2);
+    const baseMat = new THREE.MeshBasicMaterial({ color: 0x7cf7ff, transparent: true, opacity: 0.9 });
+    const beamGeo = new THREE.CylinderGeometry(0.5, 0.9, 7, 16, 1, true);
+    beamGeo.translate(0, 2.2, 0);
+    const beamMat = new THREE.MeshBasicMaterial({ color: 0x20e3ff, transparent: true, opacity: 0.12, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
+    this.disposables.push(cubeGeo, coreGeo, shellMat, coreMat, baseGeo, baseMat, beamGeo, beamMat);
     for (const u of this.track.def.pickupRows) {
       const index = this.track.indexAt(u);
       const s = this.track.sample(index);
@@ -89,8 +97,10 @@ export class WeaponSystem {
         const shell = new THREE.Mesh(cubeGeo, shellMat);
         const core = new THREE.Mesh(coreGeo, coreMat);
         const base = new THREE.Mesh(baseGeo, baseMat);
-        base.position.y = -1.25;
-        g.add(shell, core, base);
+        base.position.y = -0.2;
+        const beam = new THREE.Mesh(beamGeo, beamMat);
+        beam.position.y = -1.3;
+        g.add(shell, core, base, beam);
         const p = s.pos.clone().addScaledVector(s.right, lane * s.halfWidth * 0.8);
         g.position.set(p.x, p.y + 1.4, p.z);
         this.group.add(g);
@@ -277,7 +287,9 @@ export class WeaponSystem {
         continue;
       }
       pk.mesh.rotation.y = this.time * 1.8;
-      pk.mesh.children[0].rotation.x = this.time * 1.1;
+      pk.mesh.children[0].rotation.x = Math.sin(this.time * 1.3) * 0.3;
+      pk.mesh.children[2].rotation.x = Math.sin(this.time * 2 + pk.x) * 0.5;
+      pk.mesh.children[2].rotation.z = Math.cos(this.time * 2 + pk.z) * 0.5;
       pk.mesh.position.y = pk.y + Math.sin(this.time * 3 + pk.x) * 0.25;
       for (const v of vehicles) {
         if (v.powerUp || v.wrecked) continue;

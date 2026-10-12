@@ -95,7 +95,7 @@ class ParticlePool {
 
   setScale(viewportHeight: number): void {
     this.material.uniforms.uScale.value = viewportHeight * 0.5;
-    this.material.uniforms.uMax.value = viewportHeight * 0.07;
+    this.material.uniforms.uMax.value = viewportHeight * 0.035;
   }
 
   emit(o: EmitOptions): void {
@@ -179,7 +179,7 @@ export class Effects {
   private speedLines: THREE.LineSegments;
   private speedLinePos: Float32Array;
   private speedLineMat: THREE.LineBasicMaterial;
-  private readonly lineCount = 70;
+  private readonly lineCount = 40;
   private lineSeeds: Float32Array;
   /** 0..1 multiplier from quality settings. */
   density = 1;
@@ -272,7 +272,7 @@ export class Effects {
     }
     // Speed lines
     const intensity = speedEffects ? Math.max(0, (speedFraction - 0.55) / 0.45) : 0;
-    this.speedLineMat.opacity = intensity * 0.55;
+    this.speedLineMat.opacity = intensity * 0.22;
     this.speedLines.visible = intensity > 0.01;
     if (this.speedLines.visible) {
       const v = 60 + speedFraction * 90;

@@ -73,6 +73,10 @@ export class Showroom {
     this.turntable.add(this.car.root);
   }
 
+  get carObject(): THREE.Object3D | null {
+    return this.car?.root ?? null;
+  }
+
   attach(): void {
     if (!this.root.parent) this.scene.add(this.root);
     if (this.built) {

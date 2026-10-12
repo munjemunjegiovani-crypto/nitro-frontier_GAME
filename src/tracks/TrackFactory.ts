@@ -1,5 +1,6 @@
 import * as THREE from 'three';
-import type { Track, TrackTheme } from './Track';
+import type { Track } from './Track';
+import { asphalt, barrierTexture, facadeTexture, kerbTexture, pavementTexture, rockStrata, sandTexture, worldSpaceWindows } from './Materials';
 
 export type Quality = 'low' | 'medium' | 'high';
 
@@ -26,56 +27,6 @@ function canvas(w: number, h: number): [HTMLCanvasElement, CanvasRenderingContex
 function hex(c: number, a = 1): string {
   const col = new THREE.Color(c);
   return `rgba(${Math.round(col.r * 255)},${Math.round(col.g * 255)},${Math.round(col.b * 255)},${a})`;
-}
-
-function roadTexture(theme: TrackTheme): THREE.CanvasTexture {
-  const [c, g] = canvas(256, 512);
-  g.fillStyle = hex(theme.road);
-  g.fillRect(0, 0, 256, 512);
-  // asphalt grain
-  for (let i = 0; i < 9000; i++) {
-    const v = Math.random();
-    g.fillStyle = v > 0.5 ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.18)';
-    g.fillRect(Math.random() * 256, Math.random() * 512, 1.5, 1.5);
-  }
-  // tyre wear lanes
-  g.fillStyle = 'rgba(0,0,0,0.18)';
-  g.fillRect(70, 0, 22, 512);
-  g.fillRect(164, 0, 22, 512);
-  // edge lines
-  g.fillStyle = 'rgba(240,244,255,0.85)';
-  g.fillRect(8, 0, 6, 512);
-  g.fillRect(242, 0, 6, 512);
-  // centre dashes
-  g.fillStyle = hex(theme.edge, 0.75);
-  g.fillRect(125, 0, 6, 200);
-  g.fillRect(125, 256, 6, 200);
-  const t = new THREE.CanvasTexture(c);
-  t.wrapS = THREE.ClampToEdgeWrapping;
-  t.wrapT = THREE.RepeatWrapping;
-  t.colorSpace = THREE.SRGBColorSpace;
-  t.anisotropy = 8;
-  return t;
-}
-
-function windowTexture(lit: string, density: number): THREE.CanvasTexture {
-  const [c, g] = canvas(128, 256);
-  g.fillStyle = '#000';
-  g.fillRect(0, 0, 128, 256);
-  for (let y = 4; y < 256; y += 10) {
-    for (let x = 4; x < 128; x += 8) {
-      if (Math.random() < density) {
-        g.fillStyle = lit;
-        g.globalAlpha = 0.35 + Math.random() * 0.65;
-        g.fillRect(x, y, 5, 6);
-      }
-    }
-  }
-  g.globalAlpha = 1;
-  const t = new THREE.CanvasTexture(c);
-  t.wrapS = t.wrapT = THREE.RepeatWrapping;
-  t.colorSpace = THREE.SRGBColorSpace;
-  return t;
 }
 
 function chevronTexture(color: number): THREE.CanvasTexture {
@@ -227,12 +178,26 @@ export function buildTrack(track: Track, quality: Quality): BuiltTrack {
       uniform vec3 top; uniform vec3 horizon; uniform float night; uniform vec3 sunDir; uniform vec3 sunColor;
       varying vec3 vDir;
       float hash(vec3 p){ p = fract(p*0.3183099+.1); p*=17.0; return fract(p.x*p.y*p.z*(p.x+p.y+p.z)); }
+      float h2(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+      float vnoise(vec2 p){ vec2 i = floor(p), f = fract(p); f = f*f*(3.0-2.0*f);
+        return mix(mix(h2(i), h2(i+vec2(1,0)), f.x), mix(h2(i+vec2(0,1)), h2(i+vec2(1,1)), f.x), f.y); }
       void main(){
         float h = clamp(vDir.y, -0.2, 1.0);
         vec3 col = mix(horizon, top, pow(max(h,0.0), 0.55));
         col = mix(col, horizon*0.6, step(h, 0.0));
         float s = max(dot(normalize(vDir), sunDir), 0.0);
-        col += sunColor * (pow(s, 24.0)*0.6 + pow(s, 600.0)*2.0) * (1.0 - night*0.7);
+        col += sunColor * (pow(s, 48.0)*0.35 + pow(s, 900.0)*1.6) * (1.0 - night*0.7);
+        // Procedural clouds projected on a sky dome.
+        if (h > 0.0) {
+          vec2 cp = vDir.xz / (vDir.y + 0.12) * 1.6;
+          float cl = 0.0, amp = 0.55;
+          for (int o = 0; o < 5; o++) { cl += amp * vnoise(cp); cp = cp * 2.07 + vec2(1.7, 9.2); amp *= 0.5; }
+          float cover = smoothstep(0.52, 0.8, cl) * smoothstep(0.02, 0.25, h) * (1.0 - night * 0.6);
+          vec3 cloudCol = mix(horizon * 1.25 + vec3(0.08), vec3(1.0, 0.97, 0.94), pow(max(h, 0.0), 0.4)) ;
+          cloudCol += sunColor * pow(s, 8.0) * 0.3;
+          if (night > 0.5) cloudCol = horizon * 0.7;
+          col = mix(col, cloudCol, cover * 0.85);
+        }
         if (night > 0.5) {
           vec3 p = floor(vDir*420.0);
           float st = step(0.9975, hash(p)) * smoothstep(0.05, 0.4, h);
@@ -266,11 +231,16 @@ export function buildTrack(track: Track, quality: Quality): BuiltTrack {
     groundGeo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
     groundGeo.computeVertexNormals();
   }
+  const groundSet = def.scenery === 'canyon' ? sandTexture(0xffffff) : pavementTexture(theme.ground);
+  for (const t of [groundSet.map, groundSet.normalMap, groundSet.roughnessMap]) { keep(t); t.repeat.set(160, 160); }
   const groundMat = keep(new THREE.MeshStandardMaterial({
-    color: def.scenery === 'canyon' ? 0xffffff : theme.ground,
+    color: def.scenery === 'canyon' ? 0xffffff : 0xffffff,
+    map: groundSet.map,
+    normalMap: groundSet.normalMap,
+    roughnessMap: groundSet.roughnessMap,
     vertexColors: def.scenery === 'canyon',
-    roughness: def.scenery === 'city' ? 0.55 : 0.95,
-    metalness: def.scenery === 'city' ? 0.3 : 0,
+    roughness: 1,
+    metalness: def.scenery === 'city' ? 0.2 : 0,
   }));
   const ground = new THREE.Mesh(groundGeo, groundMat);
   ground.position.y = groundY - (def.scenery === 'canyon' ? 0.5 : 0);
@@ -285,16 +255,39 @@ export function buildTrack(track: Track, quality: Quality): BuiltTrack {
     out.y += lift;
   };
 
-  const roadTex = keep(roadTexture(theme));
+  const roadSet = asphalt(theme);
+  keep(roadSet.map); keep(roadSet.normalMap); keep(roadSet.roughnessMap);
   const roadMat = keep(new THREE.MeshStandardMaterial({
-    map: roadTex,
-    roughness: theme.night ? 0.32 : 0.82,
-    metalness: theme.night ? 0.35 : 0.05,
+    map: roadSet.map,
+    normalMap: roadSet.normalMap,
+    normalScale: new THREE.Vector2(0.7, 0.7),
+    roughnessMap: roadSet.roughnessMap,
+    roughness: 1,
+    metalness: theme.night ? 0.1 : 0,
+    envMapIntensity: theme.night ? 1.4 : 0.8,
   }));
   const roadGeo = keep(strip(n, edge(-1, 0.02, 0.6), edge(1, 0.02, 0.6), 1 / 26));
   const road = new THREE.Mesh(roadGeo, roadMat);
   road.receiveShadow = true;
   group.add(road);
+
+  /* ---------- Kerbs on corners ---------- */
+  {
+    const corner = new Uint8Array(n);
+    for (let i = 0; i < n; i++) {
+      let c = 0;
+      for (let k = -8; k <= 8; k += 2) c += Math.abs(track.sample(i + k).curvature);
+      corner[i] = c / 9 > 0.0065 && !track.sample(i).covered ? 1 : 0;
+    }
+    const kerbTex = keep(kerbTexture());
+    const kerbMat = keep(new THREE.MeshStandardMaterial({
+      map: kerbTex, roughness: 0.55, metalness: 0, side: THREE.DoubleSide,
+      polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2,
+    }));
+    const isCorner = (i: number) => corner[i] === 1;
+    group.add(new THREE.Mesh(keep(strip(n, edge(-1, 0.05, 0.55), edge(-1, 0.05, -0.9), 1 / 4, isCorner)), kerbMat));
+    group.add(new THREE.Mesh(keep(strip(n, edge(1, 0.05, -0.9), edge(1, 0.05, 0.55), 1 / 4, isCorner)), kerbMat));
+  }
 
   // Deck sides and underside (visible on elevated sections)
   const deckMat = keep(new THREE.MeshStandardMaterial({ color: 0x23262e, roughness: 0.7, metalness: 0.4, side: THREE.DoubleSide }));
@@ -305,14 +298,21 @@ export function buildTrack(track: Track, quality: Quality): BuiltTrack {
   group.add(new THREE.Mesh(keep(strip(n, edge(-1, -1.6, 1.4), edge(1, -1.6, 1.4), 1 / 10)), deckMat));
 
   /* ---------- Barriers ---------- */
-  const barrierMat = keep(new THREE.MeshStandardMaterial({ color: 0x2b2f3a, roughness: 0.4, metalness: 0.7, side: THREE.DoubleSide }));
+  const barrierMats = [theme.edge, theme.edgeAlt].map((c) => keep(new THREE.MeshStandardMaterial({
+    map: keep(barrierTexture(c)), roughness: 0.85, metalness: 0, side: THREE.DoubleSide,
+  })));
   const glowMats = [theme.edge, theme.edgeAlt].map((c) => keep(new THREE.MeshBasicMaterial({ color: c, side: THREE.DoubleSide })));
+  const railMat = keep(new THREE.MeshStandardMaterial({ color: 0xb8bec8, metalness: 0.9, roughness: 0.3, side: THREE.DoubleSide }));
   for (const side of [-1, 1]) {
-    group.add(new THREE.Mesh(keep(strip(n, edge(side, 0, 1.4), edge(side, 1.25, 1.4), 1 / 10)), barrierMat));
-    // glowing rail on top of the barrier
-    group.add(new THREE.Mesh(keep(strip(n, edge(side, 1.25, 1.35), edge(side, 1.45, 1.35), 1 / 10)), glowMats[side < 0 ? 0 : 1]));
-    // ground-level light strip
-    group.add(new THREE.Mesh(keep(strip(n, edge(side, 0.05, 0.25), edge(side, 0.05, 0.55), 1 / 10)), glowMats[side < 0 ? 0 : 1]));
+    const k = side < 0 ? 0 : 1;
+    // Concrete wall (inner face) with a slight lean back
+    group.add(new THREE.Mesh(keep(strip(n, edge(side, 0, 1.3), edge(side, 1.35, 1.45), 1 / 10)), barrierMats[k]));
+    // Wall top cap
+    group.add(new THREE.Mesh(keep(strip(n, edge(side, 1.35, 1.45), edge(side, 1.35, 1.85), 1 / 10)), railMat));
+    // Glowing light strip on the wall top
+    group.add(new THREE.Mesh(keep(strip(n, edge(side, 1.36, 1.5), edge(side, 1.36, 1.62), 1 / 10)), glowMats[k]));
+    // Ground-level light strip
+    group.add(new THREE.Mesh(keep(strip(n, edge(side, 0.04, 0.95), edge(side, 0.04, 1.2), 1 / 10)), glowMats[k]));
   }
 
   /* ---------- Support pillars ---------- */
@@ -498,26 +498,56 @@ function scatter(track: Track, rand: () => number, count: number, minDist: numbe
 function buildCity(track: Track, group: THREE.Group, keep: Keep, rand: () => number, groundY: number, detail: number): void {
   const boxGeo = keep(new THREE.BoxGeometry(1, 1, 1));
   boxGeo.translate(0, 0.5, 0);
-  const palettes = ['#9fe9ff', '#ffb070', '#ff8ad8'];
+  const palettes = [[0x9fe9ff, 0xffffff], [0xffb070, 0xffe2b0], [0xff8ad8, 0x9fe9ff]];
   const spots = scatter(track, rand, Math.floor(260 * detail), 14, 170);
   const perMat = Math.ceil(spots.length / palettes.length);
   const m = new THREE.Matrix4();
+  const q = new THREE.Quaternion();
+  const up = new THREE.Vector3(0, 1, 0);
+  const roofTops: THREE.Vector3[] = [];
   palettes.forEach((pal, pi) => {
-    const tex = keep(windowTexture(pal, 0.45));
+    const tex = keep(facadeTexture(pal, 100 + pi));
     const mat = keep(new THREE.MeshStandardMaterial({
-      color: 0x10131b, roughness: 0.35, metalness: 0.7, emissive: 0xffffff, emissiveMap: tex, emissiveIntensity: 1.3,
+      color: 0x1a1f2b, roughness: 0.28, metalness: 0.75, emissive: 0xffffff, emissiveMap: tex, emissiveIntensity: 1.5,
     }));
+    worldSpaceWindows(mat, 26);
     const slice = spots.slice(pi * perMat, (pi + 1) * perMat);
-    const inst = new THREE.InstancedMesh(boxGeo, mat, slice.length);
+    // Two instances per building: main block plus an optional set-back tier.
+    const inst = new THREE.InstancedMesh(boxGeo, mat, slice.length * 2);
     slice.forEach((p, k) => {
-      const w = 10 + rand() * 18;
-      const d = 10 + rand() * 18;
-      const h = 20 + rand() ** 1.6 * 130;
-      m.compose(new THREE.Vector3(p.x, groundY, p.z), new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), rand() * Math.PI), new THREE.Vector3(w, h, d));
-      inst.setMatrixAt(k, m);
+      const w = 12 + rand() * 18;
+      const d = 12 + rand() * 18;
+      const h = 22 + rand() ** 1.6 * 140;
+      q.setFromAxisAngle(up, rand() * Math.PI);
+      m.compose(new THREE.Vector3(p.x, groundY, p.z), q, new THREE.Vector3(w, h, d));
+      inst.setMatrixAt(k * 2, m);
+      if (rand() < 0.55) {
+        const th = 8 + rand() * h * 0.35;
+        m.compose(new THREE.Vector3(p.x, groundY + h, p.z), q, new THREE.Vector3(w * 0.62, th, d * 0.62));
+        roofTops.push(new THREE.Vector3(p.x, groundY + h + th, p.z));
+      } else {
+        m.makeScale(0, 0, 0);
+        roofTops.push(new THREE.Vector3(p.x, groundY + h, p.z));
+      }
+      inst.setMatrixAt(k * 2 + 1, m);
     });
+    inst.castShadow = true;
     group.add(inst);
   });
+  // Rooftop antennas with red aviation beacons
+  const tall = roofTops.filter((r) => r.y - groundY > 60);
+  if (tall.length) {
+    const antGeo = keep(new THREE.CylinderGeometry(0.25, 0.4, 14, 6));
+    antGeo.translate(0, 7, 0);
+    const beaconGeo = keep(new THREE.SphereGeometry(0.9, 8, 6));
+    const ants = new THREE.InstancedMesh(antGeo, keep(new THREE.MeshStandardMaterial({ color: 0x30343c, metalness: 0.8, roughness: 0.4 })), tall.length);
+    const beacons = new THREE.InstancedMesh(beaconGeo, keep(new THREE.MeshBasicMaterial({ color: 0xff2b2b })), tall.length);
+    tall.forEach((r, k) => {
+      ants.setMatrixAt(k, m.makeTranslation(r.x, r.y, r.z));
+      beacons.setMatrixAt(k, m.makeTranslation(r.x, r.y + 14, r.z));
+    });
+    group.add(ants, beacons);
+  }
   // Neon billboards on poles beside the road
   const signs = ['NOVA', 'KAIJU', 'VOLT', 'ORBIT', 'ZEN'];
   const colors = [0x20e3ff, 0xff2fb4, 0xff7a1a];
@@ -583,6 +613,7 @@ function buildCanyon(track: Track, group: THREE.Group, keep: Keep, rand: () => n
   ] as const) {
     const spots = scatter(track, rand, Math.floor(count * detail), minD, maxD);
     const mat = keep(new THREE.MeshStandardMaterial({ color, roughness: 0.95, flatShading: true }));
+    rockStrata(mat);
     const inst = new THREE.InstancedMesh(rockGeo, mat, spots.length);
     spots.forEach((s, k) => {
       const sc = scaleLo + rand() * (scaleHi - scaleLo);
@@ -597,7 +628,8 @@ function buildCanyon(track: Track, group: THREE.Group, keep: Keep, rand: () => n
   // Mesas: layered tapered columns
   const mesaGeo = keep(new THREE.CylinderGeometry(0.75, 1, 1, 7, 4));
   mesaGeo.translate(0, 0.5, 0);
-  const mesaMat = keep(new THREE.MeshStandardMaterial({ color: 0xa4512b, roughness: 1, flatShading: true }));
+  const mesaMat = keep(new THREE.MeshStandardMaterial({ color: 0xb05c34, roughness: 1, flatShading: true }));
+  rockStrata(mesaMat);
   const mesaSpots = scatter(track, rand, Math.floor(26 * detail), 60, 380);
   const mesas = new THREE.InstancedMesh(mesaGeo, mesaMat, mesaSpots.length);
   mesaSpots.forEach((s, k) => {
@@ -654,9 +686,10 @@ function buildSkyline(track: Track, group: THREE.Group, keep: Keep, rand: () => 
   // Megacity far below
   const boxGeo = keep(new THREE.BoxGeometry(1, 1, 1));
   boxGeo.translate(0, 0.5, 0);
-  for (const [pal, count] of [['#9fe9ff', 220], ['#ffc28a', 160]] as const) {
-    const tex = keep(windowTexture(pal, 0.35));
-    const mat = keep(new THREE.MeshStandardMaterial({ color: 0x141a2a, roughness: 0.4, metalness: 0.6, emissive: 0xffffff, emissiveMap: tex, emissiveIntensity: 1.1 }));
+  for (const [pal, count] of [[[0x9fe9ff, 0xffffff], 220], [[0xffc28a, 0xffe2b0], 160]] as const) {
+    const tex = keep(facadeTexture([...pal], count));
+    const mat = keep(new THREE.MeshStandardMaterial({ color: 0x1b2234, roughness: 0.3, metalness: 0.7, emissive: 0xffffff, emissiveMap: tex, emissiveIntensity: 1.3 }));
+    worldSpaceWindows(mat, 30);
     const c = Math.floor(count * detail);
     const inst = new THREE.InstancedMesh(boxGeo, mat, c);
     for (let k = 0; k < c; k++) {

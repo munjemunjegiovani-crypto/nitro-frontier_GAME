@@ -105,7 +105,7 @@ export class Vehicle {
     const boosting = p.boosting || this.nitroSurgeTime > 0;
     for (const f of this.model.flames) {
       f.visible = boosting;
-      if (boosting) f.scale.set(1, 1, 0.8 + Math.random() * 0.6 + (this.nitroSurgeTime > 0 ? 0.6 : 0));
+      if (boosting) f.scale.set(1, 1, 0.7 + Math.random() * 0.5 + (this.nitroSurgeTime > 0 ? 0.4 : 0));
     }
     this.model.flameMaterial.color.setHex(this.nitroSurgeTime > 0 ? 0xffd23f : 0x54e8ff);
     const sh = this.model.shield;

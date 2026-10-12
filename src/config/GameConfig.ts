@@ -39,10 +39,10 @@ export const COMBAT = {
 } as const;
 
 export const CAMERA = {
-  distance: 9.5,
-  height: 3.6,
-  lookAhead: 6,
-  baseFov: 68,
+  distance: 7.2,
+  height: 2.35,
+  lookAhead: 5,
+  baseFov: 64,
   maxFovBoost: 16,
   followStiffness: 7,
 } as const;
