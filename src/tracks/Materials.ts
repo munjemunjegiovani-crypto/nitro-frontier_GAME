@@ -206,25 +206,31 @@ export function barrierTexture(band: number): THREE.CanvasTexture {
 
 /** Window grid texture: each tile = 4 bays × 4 floors. */
 export function facadeTexture(lit: number[], seed: number): THREE.CanvasTexture {
-  const S = 256;
+  const S = 512;
   const c = document.createElement('canvas');
   c.width = S; c.height = S;
   const g = c.getContext('2d')!;
   const r = rng(seed);
   g.fillStyle = '#000';
   g.fillRect(0, 0, S, S);
-  const bays = 8, floors = 8;
+  const bays = 16, floors = 24;
   const bw = S / bays, fh = S / floors;
+  const whites = [0xffe3b0, 0xfff1d4, 0xd6e8ff, 0xffd08a];
   for (let f = 0; f < floors; f++) {
+    // Whole floors tend to be on or off (offices), with a few stragglers.
+    const floorOn = r() < 0.55;
     for (let b = 0; b < bays; b++) {
-      if (r() < 0.42) {
-        const col = new THREE.Color(lit[Math.floor(r() * lit.length)]);
-        const k = 0.35 + r() * 0.65;
-        g.fillStyle = `rgba(${col.r * 255 * k},${col.g * 255 * k},${col.b * 255 * k},1)`;
-        g.fillRect(b * bw + 3, f * fh + 4, bw - 6, fh - 9);
-        // interior light falloff
-        g.fillStyle = 'rgba(0,0,0,0.35)';
-        g.fillRect(b * bw + 3, f * fh + fh - 9, bw - 6, 4);
+      if (r() < (floorOn ? 0.85 : 0.1)) {
+        const accent = r() < 0.12;
+        const col = new THREE.Color(accent ? lit[Math.floor(r() * lit.length)] : whites[Math.floor(r() * whites.length)]);
+        const k = 0.45 + r() * 0.55;
+        const x = b * bw + 2, y = f * fh + 2, w = bw - 4, h = fh - 5;
+        const grad = g.createLinearGradient(0, y, 0, y + h);
+        grad.addColorStop(0, `rgba(${col.r * 255 * k},${col.g * 255 * k},${col.b * 255 * k},1)`);
+        grad.addColorStop(1, `rgba(${col.r * 255 * k * 0.55},${col.g * 255 * k * 0.55},${col.b * 255 * k * 0.55},1)`);
+        g.fillStyle = grad;
+        g.fillRect(x, y, w, h);
+        if (r() < 0.25) { g.fillStyle = 'rgba(0,0,0,0.55)'; g.fillRect(x + w * 0.6, y, w * 0.4, h); } // blinds
       }
     }
   }

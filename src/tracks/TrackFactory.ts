@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import type { Track } from './Track';
+import { buildDesertLife, buildLampLight, buildNeonTrim, buildRoofClutter, buildStreetTrees, type Lamp, type Roof } from './Scenery';
 import { asphalt, barrierTexture, facadeTexture, kerbTexture, pavementTexture, rockStrata, sandTexture, worldSpaceWindows } from './Materials';
 
 export type Quality = 'low' | 'medium' | 'high';
@@ -505,12 +506,14 @@ function buildCity(track: Track, group: THREE.Group, keep: Keep, rand: () => num
   const q = new THREE.Quaternion();
   const up = new THREE.Vector3(0, 1, 0);
   const roofTops: THREE.Vector3[] = [];
+  const roofs: Roof[] = [];
+  const towers: { x: number; z: number; w: number; d: number; h: number; rot: number; y: number }[] = [];
   palettes.forEach((pal, pi) => {
     const tex = keep(facadeTexture(pal, 100 + pi));
     const mat = keep(new THREE.MeshStandardMaterial({
       color: 0x1a1f2b, roughness: 0.28, metalness: 0.75, emissive: 0xffffff, emissiveMap: tex, emissiveIntensity: 1.5,
     }));
-    worldSpaceWindows(mat, 26);
+    worldSpaceWindows(mat, 56);
     const slice = spots.slice(pi * perMat, (pi + 1) * perMat);
     // Two instances per building: main block plus an optional set-back tier.
     const inst = new THREE.InstancedMesh(boxGeo, mat, slice.length * 2);
@@ -518,16 +521,20 @@ function buildCity(track: Track, group: THREE.Group, keep: Keep, rand: () => num
       const w = 12 + rand() * 18;
       const d = 12 + rand() * 18;
       const h = 22 + rand() ** 1.6 * 140;
-      q.setFromAxisAngle(up, rand() * Math.PI);
+      const rot = rand() * Math.PI;
+      q.setFromAxisAngle(up, rot);
       m.compose(new THREE.Vector3(p.x, groundY, p.z), q, new THREE.Vector3(w, h, d));
       inst.setMatrixAt(k * 2, m);
+      towers.push({ x: p.x, z: p.z, w, d, h, rot, y: groundY });
       if (rand() < 0.55) {
         const th = 8 + rand() * h * 0.35;
         m.compose(new THREE.Vector3(p.x, groundY + h, p.z), q, new THREE.Vector3(w * 0.62, th, d * 0.62));
         roofTops.push(new THREE.Vector3(p.x, groundY + h + th, p.z));
+        roofs.push({ x: p.x, y: groundY + h, z: p.z, w: w * 0.6, d: d * 0.6, rot });
       } else {
         m.makeScale(0, 0, 0);
         roofTops.push(new THREE.Vector3(p.x, groundY + h, p.z));
+        roofs.push({ x: p.x, y: groundY + h, z: p.z, w, d, rot });
       }
       inst.setMatrixAt(k * 2 + 1, m);
     });
@@ -586,6 +593,17 @@ function buildCity(track: Track, group: THREE.Group, keep: Keep, rand: () => num
     bulbs.setMatrixAt(k, m);
   });
   group.add(poles, bulbs);
+  const lamps: Lamp[] = lampIdx.map((i, k) => {
+    const sm = track.sample(i);
+    const side = k % 2 ? 1 : -1;
+    const lp = sm.pos.clone().addScaledVector(sm.right, side * (sm.halfWidth + 2)).addScaledVector(sm.right, -side * 1.5);
+    lp.y = sm.pos.y + 8.9;
+    return { pos: lp, dir: new THREE.Vector3(0, -1, 0) };
+  });
+  buildLampLight(group, keep, lamps, 0xffd9a0, 0.22);
+  buildRoofClutter(group, keep, rand, roofs);
+  buildNeonTrim(group, keep, rand, towers, [0x20e3ff, 0xff2fb4, 0xff7a1a]);
+  buildStreetTrees(track, group, keep, rand, groundY, detail);
   // Harbour water beyond the city
   const waterMat = keep(new THREE.MeshStandardMaterial({ color: 0x07101e, metalness: 0.9, roughness: 0.12 }));
   const water = new THREE.Mesh(keep(new THREE.PlaneGeometry(3000, 900)), waterMat);
@@ -665,6 +683,7 @@ function buildCanyon(track: Track, group: THREE.Group, keep: Keep, rand: () => n
       group.add(st);
     }
   }
+  buildDesertLife(track, group, keep, rand, groundY, detail, (n, a, b) => scatter(track, rand, n, a, b));
   // Power lines / pylons along the straights for speed reference
   const poleGeo = keep(new THREE.BoxGeometry(0.6, 12, 0.6));
   poleGeo.translate(0, 6, 0);
@@ -689,7 +708,7 @@ function buildSkyline(track: Track, group: THREE.Group, keep: Keep, rand: () => 
   for (const [pal, count] of [[[0x9fe9ff, 0xffffff], 220], [[0xffc28a, 0xffe2b0], 160]] as const) {
     const tex = keep(facadeTexture([...pal], count));
     const mat = keep(new THREE.MeshStandardMaterial({ color: 0x1b2234, roughness: 0.3, metalness: 0.7, emissive: 0xffffff, emissiveMap: tex, emissiveIntensity: 1.3 }));
-    worldSpaceWindows(mat, 30);
+    worldSpaceWindows(mat, 70);
     const c = Math.floor(count * detail);
     const inst = new THREE.InstancedMesh(boxGeo, mat, c);
     for (let k = 0; k < c; k++) {
