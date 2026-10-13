@@ -420,8 +420,10 @@ export class Game {
       // Settings opened from pause, or standings over the last race scene: keep scene static.
     }
     if (race) race.effects.setViewportHeight(this.renderer.viewportHeight);
-    this.updateReflections(race);
     this.renderer.render();
+    // Captured after the frame so shadow maps already exist; the probe
+    // reuses them for its six faces. Reflections lag one frame (invisible).
+    this.updateReflections(race);
     this.renderer.trackFrame(dt);
   }
 }

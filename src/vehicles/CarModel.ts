@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import type { VehicleConfig, VehicleShape } from './VehicleConfig';
+import { instantiateCarAsset } from './CarAssets';
 
 /** Handles to the animated parts of a procedurally built car. */
 export interface CarModel {
@@ -670,7 +671,26 @@ export function buildCarModel(cfg: VehicleConfig, opts: { lights?: boolean } = {
   shield.visible = false;
   root.add(shield);
 
-  mergeStatic(body, new Set<THREE.Object3D>(flames), keep);
+  // An imported model (public/models/manifest.json) replaces the sculpted
+  // body; lights, flames, shield and underglow stay procedural.
+  const imported = instantiateCarAsset(cfg.id, sh);
+  if (imported) {
+    const keepParts = new Set<THREE.Object3D>(flames);
+    body.children.forEach((c) => { if ((c as THREE.SpotLight).isSpotLight || c === (c as THREE.SpotLight).target) keepParts.add(c); });
+    body.traverse((c) => { if ((c as THREE.SpotLight).isSpotLight) keepParts.add((c as THREE.SpotLight).target); });
+    for (const c of [...body.children]) if (!keepParts.has(c)) body.remove(c);
+    body.add(imported.object);
+    if (imported.entry.hideWheels !== false) {
+      for (const w of wheels) (w.parent as THREE.Object3D).visible = false;
+    }
+    imported.object.traverse((o) => {
+      const m = o as THREE.Mesh;
+      if (!m.isMesh) return;
+      disposables.push({ dispose: () => (Array.isArray(m.material) ? m.material : [m.material]).forEach((x) => x.dispose()) });
+    });
+  } else {
+    mergeStatic(body, new Set<THREE.Object3D>(flames), keep);
+  }
 
   return {
     root, body, wheels, frontWheels, brakeMaterial, flames, flameMaterial, underglow, shield, shieldMaterial,

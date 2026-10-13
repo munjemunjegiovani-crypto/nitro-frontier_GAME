@@ -5,6 +5,7 @@ import '@fontsource/chakra-petch/700-italic.css';
 import './styles/main.css';
 import { Game } from './game/Game';
 import { webglAvailable } from './rendering/Renderer';
+import { preloadCarModels } from './vehicles/CarAssets';
 
 const loader = document.getElementById('boot-loader')!;
 const fill = document.getElementById('boot-fill')!;
@@ -31,6 +32,11 @@ async function boot(): Promise<void> {
     return;
   }
   try {
+    await progress(0.08, 'Loading car models…');
+    const models = await preloadCarModels((d, t) => {
+      fill.style.width = `${Math.round(8 + (d / Math.max(1, t)) * 7)}%`;
+    });
+    if (models.length) console.info(`[models] using imported models for: ${models.join(', ')}`);
     await progress(0.15, 'Starting renderer…');
     const canvas = document.getElementById('game-canvas') as HTMLCanvasElement;
     const ui = document.getElementById('ui-root')!;

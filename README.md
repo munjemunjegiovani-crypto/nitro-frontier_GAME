@@ -78,6 +78,20 @@ cd nitro-frontier
 npm install
 ```
 
+### Optional: AI-generated 3D car models
+
+Six 3D car bodies were generated for this game with [Higgsfield](https://higgsfield.ai) (concept images with *Z Image*, converted to 3D with *SAM 3 3D Objects*). They are not stored in the repository; download them into `public/models/` with:
+
+```bash
+npm run models
+```
+
+The script downloads each model and registers it in `public/models/manifest.json`. Cars whose model is missing simply keep their built-in procedural body, so the game always works.
+
+When a model is loaded, the game automatically turns its longest side to face the driving direction, scales it to the car's real length and puts it on the ground. If a car ends up **facing backwards**, set `"flip": true` for it in `public/models/manifest.json` (or fine-tune with `"yawDegrees"`). Other options: `"hideWheels": false` keeps the spinning procedural wheels, `"scale"` adjusts size, `"tint": "#rrggbb"` recolours the model.
+
+You can use your own GLB models the same way: drop `<car-id>.glb` into `public/models/` and add a line to the manifest. Car ids are `vortex`, `ember`, `titan`, `phantom`, `kestrel` and `tempest`.
+
 ## Development
 
 ```bash
@@ -160,6 +174,7 @@ src/
     VehiclePhysics.ts     Arcade physics: grip, drift, nitro, walls, airtime
     Vehicle.ts            A racer: physics + model + race/combat state
     CarModel.ts           Procedural car meshes
+    CarAssets.ts          Loads optional GLB car models and auto-aligns them
     PlayerController.ts   Keyboard input (never sticks on blur/pause)
   ai/
     AIDriver.ts           Steering, braking, avoidance, pickups, weapon tactics
@@ -203,13 +218,16 @@ tests/                    Vitest unit tests
 | `npm install` fails / “Unsupported engine” | Upgrade Node.js to 22.12+ (`nvm install 22`). |
 | Port 5173 already in use | `npm run dev -- --port 3000` |
 | Blank page after deploying | Upload the *contents* of `dist/`, not the project folder. |
+| A downloaded car faces backwards | Set `"flip": true` for that car in `public/models/manifest.json` and reload. |
+| `npm run models` fails | Check your internet connection; failed cars keep the built-in model. Run it again later. |
 | Settings or best times not saving | Private/incognito windows may block `localStorage`; the game still runs but won't remember settings. |
 
 ---
 
 ## Assets, licensing and attribution
 
-- **All game content is original and generated in code**: car models, tracks, scenery, textures, icons, particle effects, sound effects and music. No third-party art or audio files are included.
+- **All game content in the repository is original and generated in code**: car models, tracks, scenery, textures, icons, particle effects, sound effects and music. No third-party art or audio files are included.
+- **Optional AI-generated car models** (downloaded by `npm run models`, not part of the repository) were generated with Higgsfield from original text prompts. Check Higgsfield's terms of service for your plan before redistributing those files.
 - **Font:** [Chakra Petch](https://github.com/m4rc1e/Chakra-Petch) by Cadson Demak, licensed under the SIL Open Font License 1.1, bundled via `@fontsource/chakra-petch`.
 - **Libraries:** [three.js](https://threejs.org) (MIT), [Vite](https://vitejs.dev) (MIT), [Vitest](https://vitest.dev) (MIT), [TypeScript](https://www.typescriptlang.org) (Apache-2.0).
 - The game draws only on the broad *genre* of arcade combat racing. Its name, cars, circuits, weapons, interface, sounds and music are independent, original designs and are not affiliated with any existing game or brand.

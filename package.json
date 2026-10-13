@@ -10,7 +10,8 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "models": "bash scripts/download-car-models.sh"
   },
   "dependencies": {
     "@fontsource/chakra-petch": "^5.3.0",
