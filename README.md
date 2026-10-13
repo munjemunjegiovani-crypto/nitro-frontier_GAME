@@ -109,6 +109,16 @@ npm run preview    # serves dist/ locally to try the production build
 
 The build uses relative paths (`base: './'`), so the contents of `dist/` can be uploaded as-is to **GitHub Pages, Netlify, Vercel, itch.io** or any static host — including a sub-folder.
 
+### Deploying to Netlify
+
+The repository includes a `netlify.toml`, so Netlify configures itself:
+
+1. Push the project to GitHub.
+2. On [app.netlify.com](https://app.netlify.com): **Add new site → Import an existing project → GitHub**, then pick the repository.
+3. Leave the settings Netlify fills in (build command and `dist` folder come from `netlify.toml`) and click **Deploy**.
+
+During the build Netlify also downloads the optional 3D car models. Every later `git push` redeploys automatically.
+
 ### Deploying to GitHub Pages (one way)
 
 ```bash

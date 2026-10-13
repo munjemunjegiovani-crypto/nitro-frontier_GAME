@@ -1,0 +1,21 @@
+# Netlify configuration for Nitro Frontier.
+# Netlify reads this automatically when you connect the GitHub repository.
+[build]
+  # Download the optional 3D car models (cars keep their built-in model if a
+  # download fails), then type-check and build the game into dist/.
+  command = "bash scripts/download-car-models.sh && npm run build"
+  publish = "dist"
+
+[build.environment]
+  NODE_VERSION = "22"
+
+# Cache the big hashed files (code, fonts, models) for a long time.
+[[headers]]
+  for = "/assets/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
+[[headers]]
+  for = "/models/*.glb"
+  [headers.values]
+    Cache-Control = "public, max-age=604800"
