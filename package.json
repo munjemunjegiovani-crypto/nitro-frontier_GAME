@@ -11,7 +11,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "models": "bash scripts/download-car-models.sh"
+    "models": "bash scripts/download-car-models.sh",
+    "assets": "bash scripts/download-assets.sh"
   },
   "dependencies": {
     "@fontsource/chakra-petch": "^5.3.0",

@@ -109,6 +109,10 @@ npm run preview    # serves dist/ locally to try the production build
 
 The build uses relative paths (`base: './'`), so the contents of `dist/` can be uploaded as-is to **GitHub Pages, Netlify, Vercel, itch.io** or any static host — including a sub-folder.
 
+### Photographic assets (optional, free CC0)
+
+`npm run assets` downloads real-world HDRI skies and PBR surface photos (asphalt, ground, pavement) from [Poly Haven](https://polyhaven.com) (CC0, no attribution required) into `public/assets-pack/`. The game uses them automatically: a photographic sky and reflections on the cars, and real asphalt under the wheels. Anything that fails to download simply keeps the built-in procedural look. Netlify runs this during its build.
+
 ### Deploying to Netlify
 
 The repository includes a `netlify.toml`, so Netlify configures itself:

@@ -82,7 +82,7 @@ export class Game {
       back: () => this.go('modeSelect'),
     });
     this.trackSelect = new TrackSelect(sounds, {
-      change: (id) => { this.trackId = id; this.showroom.setTrack(id, this.renderer.qualityLevel); this.renderer.setEnvironment(getTrack(id).theme); this.probe.reset(); },
+      change: (id) => { this.trackId = id; this.showroom.setTrack(id, this.renderer.qualityLevel); this.renderer.setEnvironment(getTrack(id).theme, id); this.probe.reset(); },
       start: (id, laps) => { this.trackId = id; this.laps = laps; this.startRace(); },
       back: () => this.go('vehicleSelect'),
     });
@@ -120,7 +120,7 @@ export class Game {
 
   /** Builds the first scene and enters the main menu. */
   start(): void {
-    this.renderer.setEnvironment(getTrack(this.trackId).theme);
+    this.renderer.setEnvironment(getTrack(this.trackId).theme, this.trackId);
     this.renderer.setGradeTint(getTrack(this.trackId).theme.night);
     this.showroom.setTrack(this.trackId, this.renderer.qualityLevel);
     this.showroom.setVehicle(this.vehicleId);
@@ -230,7 +230,7 @@ export class Game {
     this.disposeRace();
     this.showroom.unload();
     const setup = this.buildSetup();
-    this.renderer.setEnvironment(getTrack(setup.trackId).theme);
+    this.renderer.setEnvironment(getTrack(setup.trackId).theme, setup.trackId);
     this.renderer.setGradeTint(getTrack(setup.trackId).theme.night);
     this.probe.reset();
     this.race = new RaceManager(setup, this.renderer.scene, this.renderer.qualityLevel, {
@@ -320,7 +320,7 @@ export class Game {
   }
 
   private reloadShowroom(): void {
-    this.renderer.setEnvironment(getTrack(this.trackId).theme);
+    this.renderer.setEnvironment(getTrack(this.trackId).theme, this.trackId);
     this.probe.reset();
     this.showroom.setTrack(this.trackId, this.renderer.qualityLevel);
     this.showroom.setVehicle(this.vehicleId);

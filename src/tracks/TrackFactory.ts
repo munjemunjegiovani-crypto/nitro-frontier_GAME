@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import type { Track } from './Track';
 import { buildDesertLife, buildLampLight, buildNeonTrim, buildRoofClutter, buildStreetTrees, type Lamp, type Roof } from './Scenery';
+import { getHdri, hasPhoto } from './AssetPack';
 import { asphalt, barrierTexture, facadeTexture, kerbTexture, pavementTexture, rockStrata, sandTexture, worldSpaceWindows } from './Materials';
 
 export type Quality = 'low' | 'medium' | 'high';
@@ -207,7 +208,30 @@ export function buildTrack(track: Track, quality: Quality): BuiltTrack {
         gl_FragColor = vec4(col, 1.0);
       }`,
   }));
-  const sky = new THREE.Mesh(keep(new THREE.SphereGeometry(1800, 32, 16)), skyMat);
+  // A real photographic sky replaces the procedural one when an HDRI is available.
+  const hdri = getHdri(def.id);
+  let skyMaterial: THREE.Material = skyMat;
+  if (hdri) {
+    // Turn the photo's sun towards the direction the track's sun light shines from.
+    const sunAz = Math.atan2(-120, -60);
+    const yaw = hdri.sunAzimuth === null ? 0 : sunAz - hdri.sunAzimuth;
+    skyMaterial = keep(new THREE.ShaderMaterial({
+      side: THREE.BackSide,
+      depthWrite: false,
+      fog: false,
+      uniforms: { tEnv: { value: hdri.texture }, uYaw: { value: yaw }, uExposure: { value: theme.night ? 1.0 : 0.9 } },
+      vertexShader: 'varying vec3 vDir; void main(){ vDir = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); gl_Position.z = gl_Position.w; }',
+      fragmentShader: `
+        uniform sampler2D tEnv; uniform float uYaw; uniform float uExposure; varying vec3 vDir;
+        void main(){
+          vec3 d = normalize(vDir);
+          float a = atan(d.z, d.x) + uYaw;
+          vec2 uv = vec2(a * 0.15915494 + 0.5, asin(clamp(d.y, -1.0, 1.0)) * 0.31830989 + 0.5);
+          gl_FragColor = vec4(texture2D(tEnv, uv).rgb * uExposure, 1.0);
+        }`,
+    }));
+  }
+  const sky = new THREE.Mesh(keep(new THREE.SphereGeometry(1800, 32, 16)), skyMaterial);
   sky.renderOrder = -10;
   sky.frustumCulled = false;
   group.add(sky);
@@ -232,8 +256,9 @@ export function buildTrack(track: Track, quality: Quality): BuiltTrack {
     groundGeo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
     groundGeo.computeVertexNormals();
   }
+  const photoGround = hasPhoto(def.scenery === 'canyon' ? 'sand' : 'pavement', 'diff');
   const groundSet = def.scenery === 'canyon' ? sandTexture(0xffffff) : pavementTexture(theme.ground);
-  for (const t of [groundSet.map, groundSet.normalMap, groundSet.roughnessMap]) { keep(t); t.repeat.set(160, 160); }
+  for (const t of [groundSet.map, groundSet.normalMap, groundSet.roughnessMap]) { keep(t); t.repeat.set(photoGround ? 700 : 160, photoGround ? 700 : 160); }
   const groundMat = keep(new THREE.MeshStandardMaterial({
     color: def.scenery === 'canyon' ? 0xffffff : 0xffffff,
     map: groundSet.map,

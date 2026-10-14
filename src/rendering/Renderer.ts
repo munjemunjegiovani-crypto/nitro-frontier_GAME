@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { getHdri } from '../tracks/AssetPack';
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
@@ -82,7 +83,18 @@ export class Renderer {
    * gradient plus a ring of neon panels. This gives cars and wet roads
    * believable reflections that match each world instead of a generic studio.
    */
-  setEnvironment(theme: TrackTheme): void {
+  setEnvironment(theme: TrackTheme, trackId?: string): void {
+    const hdri = trackId ? getHdri(trackId) : null;
+    if (hdri) {
+      const pm = new THREE.PMREMGenerator(this.renderer);
+      const target = pm.fromEquirectangular(hdri.texture);
+      pm.dispose();
+      this.envTarget?.dispose();
+      this.envTarget = target;
+      this.scene.environment = target.texture;
+      this.scene.environmentIntensity = theme.night ? 0.9 : 0.8;
+      return;
+    }
     const envScene = new THREE.Scene();
     const skyGeo = new THREE.SphereGeometry(50, 32, 16);
     const skyMat = new THREE.ShaderMaterial({

@@ -6,6 +6,7 @@ import './styles/main.css';
 import { Game } from './game/Game';
 import { webglAvailable } from './rendering/Renderer';
 import { preloadCarModels } from './vehicles/CarAssets';
+import { preloadAssetPack } from './tracks/AssetPack';
 
 const loader = document.getElementById('boot-loader')!;
 const fill = document.getElementById('boot-fill')!;
@@ -37,6 +38,10 @@ async function boot(): Promise<void> {
       fill.style.width = `${Math.round(8 + (d / Math.max(1, t)) * 7)}%`;
     });
     if (models.length) console.info(`[models] using imported models for: ${models.join(', ')}`);
+    await progress(0.12, 'Loading skies and textures…');
+    await preloadAssetPack((d, t) => {
+      fill.style.width = `${Math.round(12 + (d / Math.max(1, t)) * 3)}%`;
+    });
     await progress(0.15, 'Starting renderer…');
     const canvas = document.getElementById('game-canvas') as HTMLCanvasElement;
     const ui = document.getElementById('ui-root')!;

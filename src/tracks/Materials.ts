@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import type { TrackTheme } from './Track';
+import { drawPhotoTiles, hasPhoto } from './AssetPack';
 
 /* ------------------------------------------------------------------ */
 /* Tileable noise                                                       */
@@ -67,6 +68,16 @@ function normalCanvas(hgt: Float32Array, w: number, h: number, strength: number)
   });
 }
 
+
+/** A seamless photo tile (1024²) as a colour or normal canvas, or null. */
+function photoCanvas(name: string, kind: 'diff' | 'nor'): HTMLCanvasElement | null {
+  if (!hasPhoto(name, kind)) return null;
+  const c = document.createElement('canvas');
+  c.width = c.height = 1024;
+  drawPhotoTiles(c.getContext('2d')!, name, kind, 1024, 1024, 1024);
+  return c;
+}
+
 function tex(c: HTMLCanvasElement, srgb: boolean, repeat = true): THREE.CanvasTexture {
   const t = new THREE.CanvasTexture(c);
   t.wrapS = t.wrapT = repeat ? THREE.RepeatWrapping : THREE.ClampToEdgeWrapping;
@@ -108,7 +119,9 @@ export function asphalt(theme: TrackTheme): TextureSet {
     if (theme.night && wet[i] > 0.6) k *= 0.8;
     return [base.r * 255 * k, base.g * 255 * k, base.b * 255 * k];
   });
-  const g = color.getContext('2d')!;
+  const paint = document.createElement('canvas');
+  paint.width = W; paint.height = H;
+  const g = paint.getContext('2d')!;
   // Skid marks
   const r = rng(5);
   g.strokeStyle = 'rgba(0,0,0,0.35)';
@@ -135,9 +148,33 @@ export function asphalt(theme: TrackTheme): TextureSet {
   g.fillStyle = css(theme.edge, 0.8);
   for (let y = 0; y < H; y += 256) g.fillRect(W / 2 - 3, y, 6, 140);
 
+  const photoDiff = hasPhoto('asphalt', 'diff');
+  let finalColor = color;
+  if (photoDiff) {
+    // Real asphalt scan tiled across the road, with the markings painted on top.
+    const k = 4;
+    finalColor = document.createElement('canvas');
+    finalColor.width = W * k; finalColor.height = H * k;
+    const fg = finalColor.getContext('2d')!;
+    drawPhotoTiles(fg, 'asphalt', 'diff', W * k, H * k, 256);
+    fg.globalAlpha = 0.35; // keep a hint of the procedural lane wear
+    fg.globalCompositeOperation = 'multiply';
+    fg.drawImage(color, 0, 0, W * k, H * k);
+    fg.globalAlpha = 1; fg.globalCompositeOperation = 'source-over';
+    fg.drawImage(paint, 0, 0, W * k, H * k);
+  } else {
+    color.getContext('2d')!.drawImage(paint, 0, 0);
+  }
   const hgt = new Float32Array(W * H);
   for (let i = 0; i < hgt.length; i++) hgt[i] = fine[i] * 0.8 + blotch[i] * 0.2;
-  const normal = normalCanvas(hgt, W, H, 3.2);
+  let normal = normalCanvas(hgt, W, H, 3.2);
+  if (hasPhoto('asphalt', 'nor')) {
+    const k = 4;
+    const nc = document.createElement('canvas');
+    nc.width = W * k; nc.height = H * k;
+    drawPhotoTiles(nc.getContext('2d')!, 'asphalt', 'nor', W * k, H * k, 256);
+    normal = nc;
+  }
   const roughBase = theme.night ? 0.55 : 0.78;
   const rough = toCanvas(W, H, (i) => {
     let v = roughBase + (fine[i] - 0.5) * 0.25;
@@ -145,7 +182,7 @@ export function asphalt(theme: TrackTheme): TextureSet {
     v = Math.max(0.04, Math.min(1, v));
     return [v * 255, v * 255, v * 255];
   });
-  const map = tex(color, true), normalMap = tex(normal, false), roughnessMap = tex(rough, false);
+  const map = tex(finalColor, true), normalMap = tex(normal, false), roughnessMap = tex(rough, false);
   for (const t of [map, normalMap, roughnessMap]) t.wrapS = THREE.ClampToEdgeWrapping;
   return { map, normalMap, roughnessMap };
 }
@@ -315,9 +352,10 @@ export function sandTexture(color: number): TextureSet {
   }), true);
   const hgt = new Float32Array(W * H);
   for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) hgt[y * W + x] = Math.sin(x * 0.18 + y * 0.05 + n[y * W + x] * 9) * 0.5 + n[y * W + x];
-  const normalMap = tex(normalCanvas(hgt, W, H, 2), false);
+  const photoMap = photoCanvas('sand', 'diff'), photoNor = photoCanvas('sand', 'nor');
+  const normalMap = tex(photoNor ?? normalCanvas(hgt, W, H, 2), false);
   const roughnessMap = tex(toCanvas(W, H, () => [240, 240, 240]), false);
-  return { map, normalMap, roughnessMap };
+  return { map: photoMap ? tex(photoMap, true) : map, normalMap, roughnessMap };
 }
 
 /** Wet city ground: dark tiles with puddles. */
@@ -330,10 +368,11 @@ export function pavementTexture(color: number): TextureSet {
     const k = (0.8 + n[i] * 0.4) * joint;
     return [base.r * 255 * k * 1.4, base.g * 255 * k * 1.4, base.b * 255 * k * 1.6];
   }), true);
-  const normalMap = tex(normalCanvas(n, W, H, 1.5), false);
+  const photoMap = photoCanvas('pavement', 'diff'), photoNor = photoCanvas('pavement', 'nor');
+  const normalMap = tex(photoNor ?? normalCanvas(n, W, H, 1.5), false);
   const roughnessMap = tex(toCanvas(W, H, (i) => {
     const v = n[i] > 0.55 ? 0.1 : 0.6;
     return [v * 255, v * 255, v * 255];
   }), false);
-  return { map, normalMap, roughnessMap };
+  return { map: photoMap ? tex(photoMap, true) : map, normalMap, roughnessMap };
 }

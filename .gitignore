@@ -10,3 +10,5 @@ npm-debug.log*
 .env
 .env.*
 public/models/*.glb
+public/assets-pack/*.hdr
+public/assets-pack/*.jpg

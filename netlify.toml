@@ -3,7 +3,7 @@
 [build]
   # Download the optional 3D car models (cars keep their built-in model if a
   # download fails), then type-check and build the game into dist/.
-  command = "bash scripts/download-car-models.sh && npm run build"
+  command = "bash scripts/download-car-models.sh; bash scripts/download-assets.sh; npm run build"
   publish = "dist"
 
 [build.environment]
@@ -17,5 +17,10 @@
 
 [[headers]]
   for = "/models/*.glb"
+  [headers.values]
+    Cache-Control = "public, max-age=604800"
+
+[[headers]]
+  for = "/assets-pack/*"
   [headers.values]
     Cache-Control = "public, max-age=604800"
