@@ -376,3 +376,103 @@ export function pavementTexture(color: number): TextureSet {
   }), false);
   return { map: photoMap ? tex(photoMap, true) : map, normalMap, roughnessMap };
 }
+
+/* ------------------------------------------------------------------ */
+/* Road surface detail (shader)                                         */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Adds close-range realism to the road material, computed in road space
+ * (metres across / along the road) so it stays crisp at any distance:
+ * aggregate grain with bump, rubbered-in wheel lines, repair patches,
+ * cracks, oil stains and worn paint. Fades out with distance to avoid shimmer.
+ */
+export function roadSurfaceDetail(mat: THREE.MeshStandardMaterial, opts: { width: number; alongMetres: number; night: boolean }): void {
+  mat.onBeforeCompile = (shader) => {
+    shader.uniforms.uRoadW = { value: opts.width };
+    shader.uniforms.uAlong = { value: opts.alongMetres };
+    shader.uniforms.uWet = { value: opts.night ? 1 : 0 };
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', `#include <common>
+        uniform float uRoadW; uniform float uAlong; uniform float uWet;
+        float rHash(vec2 p){ vec3 p3 = fract(vec3(p.xyx) * 0.1031); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.x + p3.y) * p3.z); }
+        vec2 rHash2(vec2 p){ return vec2(rHash(p), rHash(p + 17.13)); }
+        float rNoise(vec2 p){ vec2 i = floor(p), f = fract(p); f = f*f*(3.0-2.0*f);
+          return mix(mix(rHash(i), rHash(i+vec2(1,0)), f.x), mix(rHash(i+vec2(0,1)), rHash(i+vec2(1,1)), f.x), f.y); }
+        float rFbm(vec2 p){ float a = 0.5, s = 0.0; for (int i = 0; i < 4; i++) { s += a * rNoise(p); p = p * 2.03 + 11.7; a *= 0.5; } return s; }
+        float rCracks(vec2 p){
+          vec2 i = floor(p), f = fract(p); float d1 = 8.0, d2 = 8.0;
+          for (int y = -1; y <= 1; y++) for (int x = -1; x <= 1; x++) {
+            vec2 g = vec2(float(x), float(y)); vec2 r = g + rHash2(i + g) - f; float d = dot(r, r);
+            if (d < d1) { d2 = d1; d1 = d; } else if (d < d2) d2 = d;
+          }
+          return sqrt(d2) - sqrt(d1);
+        }
+        vec3 rPerturb(vec3 surfPos, vec3 surfNorm, vec2 dHdxy, float faceDir){
+          vec3 sx = dFdx(surfPos), sy = dFdy(surfPos);
+          vec3 r1 = cross(sy, surfNorm), r2 = cross(surfNorm, sx);
+          float det = dot(sx, r1) * faceDir;
+          vec3 grad = sign(det) * (dHdxy.x * r1 + dHdxy.y * r2);
+          return normalize(abs(det) * surfNorm - grad);
+        }`)
+      .replace('#include <map_fragment>', `#include <map_fragment>
+        // Road-space coordinates in metres: x across (centre = 0), y along.
+        vec2 rp = vec2((vMapUv.x - 0.5) * uRoadW, mod(vMapUv.y * uAlong, 211.0));
+        float rDepth = length(vViewPosition);
+        float near = 1.0 - smoothstep(10.0, 55.0, rDepth);
+        float mid = 1.0 - smoothstep(25.0, 120.0, rDepth);
+        float lum0 = dot(diffuseColor.rgb, vec3(0.3333));
+        // Macro weathering along the road
+        float macro = rFbm(rp * vec2(0.12, 0.05));
+        diffuseColor.rgb *= 0.74 + 0.55 * macro;
+        // Rubbered-in wheel lines (two per lane) that follow the lane centres
+        float laneC = uRoadW * 0.12;
+        float dl = min(min(abs(abs(rp.x) - laneC * 1.0 - 0.75), abs(abs(rp.x) - laneC * 1.0 + 0.75)), 9.0);
+        float rubber = exp(-dl * dl / 0.16) * (0.5 + 0.5 * rNoise(vec2(rp.x * 0.5, rp.y * 0.08)));
+        float centreLane = exp(-pow((abs(rp.x) - laneC) / 1.6, 2.0));
+        diffuseColor.rgb *= 1.0 - 0.5 * rubber * mid;
+        // Oil drips and fluid stains on the racing lines
+        float oil = smoothstep(0.7, 0.86, rFbm(rp * vec2(0.9, 0.22) + 3.1)) * centreLane * mid;
+        diffuseColor.rgb *= 1.0 - 0.35 * oil;
+        // Repair patches
+        vec2 pc = floor(vec2((rp.x + uRoadW) / 7.0, rp.y / 21.0));
+        vec2 pf = fract(vec2((rp.x + uRoadW) / 7.0, rp.y / 21.0));
+        float ph = rHash(pc);
+        vec2 pa = 0.12 + 0.2 * rHash2(pc + 5.0), pb = 0.65 + 0.3 * rHash2(pc + 9.0);
+        float inPatch = step(0.86, ph) * step(pa.x, pf.x) * step(pf.x, pb.x) * step(pa.y, pf.y) * step(pf.y, pb.y);
+        float patchEdge = step(0.86, ph) * (1.0 - smoothstep(0.0, 0.02, min(min(pf.x - pa.x, pb.x - pf.x), min(pf.y - pa.y, pb.y - pf.y)))) * inPatch;
+        diffuseColor.rgb *= mix(1.0, 0.6, inPatch * mid);
+        diffuseColor.rgb *= 1.0 - 0.5 * patchEdge * mid;
+        // Hairline cracks (sparse, clustered)
+        float crackMask = smoothstep(0.55, 0.75, rFbm(rp * 0.07 + 7.7));
+        float crack = (1.0 - smoothstep(0.0, 0.05, rCracks(rp * vec2(0.45, 0.3)))) * crackMask * near;
+        diffuseColor.rgb *= 1.0 - 0.7 * crack;
+        // Aggregate: stones at three scales, each faded out before it would shimmer
+        float w1 = 1.0 - smoothstep(35.0, 110.0, rDepth);
+        float w2 = 1.0 - smoothstep(10.0, 45.0, rDepth);
+        float w3 = 1.0 - smoothstep(2.0, 12.0, rDepth);
+        float g1 = rNoise(rp * vec2(9.0, 7.0));
+        float g2 = rNoise(rp * 38.0 + 4.0);
+        float g3 = rNoise(rp * 140.0 + 9.0);
+        float grain = (g1 - 0.5) * 0.9 * w1 + (g2 - 0.5) * 0.8 * w2 + (g3 - 0.5) * 0.9 * w3;
+        float onPaint = smoothstep(0.5, 0.7, lum0);
+        diffuseColor.rgb *= 1.0 + 0.55 * grain * (1.0 - 0.65 * onPaint);
+        float fleck = smoothstep(0.84, 1.0, g3) * w3 + smoothstep(0.9, 1.0, g2) * w2 * 0.6;
+        diffuseColor.rgb *= 1.0 + mix(0.9, 0.25, uWet) * fleck * (1.0 - onPaint);
+        // Worn paint: chips and scuffs on the bright markings
+        float paint = smoothstep(0.5, 0.7, lum0);
+        float wear = rFbm(rp * vec2(2.4, 0.9));
+        diffuseColor.rgb *= mix(1.0, 0.55 + 0.6 * wear, paint * mid);
+        float rh = grain * 1.6 - crack * 2.0 * near - patchEdge * 1.5;`)
+      .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
+        roughnessFactor = clamp(roughnessFactor * (1.0 - 0.3 * rubber * mid) * (1.0 + 0.2 * crack) + 0.15 * inPatch, 0.04, 1.0);
+        roughnessFactor = mix(roughnessFactor, 0.28, oil * 0.8);
+        roughnessFactor = mix(roughnessFactor, min(roughnessFactor, 0.25), uWet * rubber * 0.5);`)
+      .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
+        {
+          float amp = mix(0.03, 0.01, uWet);
+          normal = rPerturb(-vViewPosition, normal, vec2(dFdx(rh), dFdy(rh)) * amp * 90.0, faceDirection);
+        }`);
+  };
+  mat.customProgramCacheKey = () => 'road-surface-detail-v6';
+}

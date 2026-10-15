@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import type { Track } from './Track';
 import { buildDesertLife, buildLampLight, buildNeonTrim, buildRoofClutter, buildStreetTrees, type Lamp, type Roof } from './Scenery';
 import { getHdri, hasPhoto } from './AssetPack';
-import { asphalt, barrierTexture, facadeTexture, kerbTexture, pavementTexture, rockStrata, sandTexture, worldSpaceWindows } from './Materials';
+import { roadSurfaceDetail, asphalt, barrierTexture, facadeTexture, kerbTexture, pavementTexture, rockStrata, sandTexture, worldSpaceWindows } from './Materials';
 
 export type Quality = 'low' | 'medium' | 'high';
 
@@ -292,7 +292,14 @@ export function buildTrack(track: Track, quality: Quality): BuiltTrack {
     metalness: theme.night ? 0.1 : 0,
     envMapIntensity: theme.night ? 1.4 : 0.8,
   }));
+  roadSurfaceDetail(roadMat, { width: def.width + 1.2, alongMetres: 26, night: theme.night });
   const roadGeo = keep(strip(n, edge(-1, 0.02, 0.6), edge(1, 0.02, 0.6), 1 / 26));
+  // The strip is wound for the barriers and deck; flip it so the road's top face points up.
+  {
+    const idx = roadGeo.index!;
+    for (let i = 0; i < idx.count; i += 3) { const t = idx.getX(i + 1); idx.setX(i + 1, idx.getX(i + 2)); idx.setX(i + 2, t); }
+    roadGeo.computeVertexNormals();
+  }
   const road = new THREE.Mesh(roadGeo, roadMat);
   road.receiveShadow = true;
   group.add(road);
